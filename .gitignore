@@ -1,0 +1,24 @@
+## Build output
+bin/
+obj/
+
+## Visual Studio
+.vs/
+*.user
+*.suo
+*.cache
+*.rsuser
+
+## Debug symbols
+*.pdb
+
+## Publish output
+publish/
+
+## OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+## Config (may contain local paths)
+config.ini
