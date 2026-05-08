@@ -18,13 +18,15 @@
             <RowDefinition Height="Auto"/>
             <!-- 2: 路徑區 -->
             <RowDefinition Height="Auto"/>
-            <!-- 3: 執行按鈕 -->
+            <!-- 3: 格式篩選 -->
             <RowDefinition Height="Auto"/>
-            <!-- 4: 進度列 -->
+            <!-- 4: 執行按鈕 -->
             <RowDefinition Height="Auto"/>
-            <!-- 5: 日誌 -->
+            <!-- 5: 進度列 -->
+            <RowDefinition Height="Auto"/>
+            <!-- 6: 日誌 -->
             <RowDefinition Height="*"/>
-            <!-- 6: 底部狀態 -->
+            <!-- 7: 底部狀態 -->
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -35,7 +37,7 @@
                            Foreground="{StaticResource PrimaryBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <TextBlock Text="OfficeToPDF" FontSize="26" FontWeight="Bold"
                            Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
-                <TextBlock Text="doc / docx / xls / xlsx  &#x2192;  PDF" FontSize="13"
+                <TextBlock Text="doc / docx / xls / xlsx / pptx  &#x2192;  PDF" FontSize="13"
                            Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="14,3,0,0"/>
             </StackPanel>
 
@@ -68,7 +70,7 @@
                            Foreground="{StaticResource PrimaryBrush}" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="DropText" Text="將資料夾拖曳到此處，或點擊選擇" FontSize="14"
                            Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
-                <TextBlock Text="支援 doc / docx / xls / xlsx 批次轉換為 PDF" FontSize="11"
+                <TextBlock Text="支援 doc / docx / xls / xlsx / pptx 批次轉換為 PDF" FontSize="11"
                            Foreground="#6B7280" HorizontalAlignment="Center" Margin="0,4,0,0"/>
             </StackPanel>
         </Border>
@@ -105,13 +107,35 @@
             </Grid>
         </StackPanel>
 
+        <!-- ═══ 格式篩選 ═══ -->
+        <Border Grid.Row="3" CornerRadius="8" Background="{StaticResource SurfaceBrush}"
+                Padding="14,10" Margin="0,0,0,14">
+            <DockPanel>
+                <TextBlock Text="轉換格式" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"
+                           DockPanel.Dock="Left" Margin="0,0,16,0"/>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <CheckBox x:Name="ChkDoc" Content=".doc" IsChecked="True"
+                              Style="{StaticResource DarkCheckBox}" Margin="0,0,18,0"/>
+                    <CheckBox x:Name="ChkDocx" Content=".docx" IsChecked="True"
+                              Style="{StaticResource DarkCheckBox}" Margin="0,0,18,0"/>
+                    <CheckBox x:Name="ChkXls" Content=".xls" IsChecked="True"
+                              Style="{StaticResource DarkCheckBox}" Margin="0,0,18,0"/>
+                    <CheckBox x:Name="ChkXlsx" Content=".xlsx" IsChecked="True"
+                              Style="{StaticResource DarkCheckBox}" Margin="0,0,18,0"/>
+                    <CheckBox x:Name="ChkPptx" Content=".pptx" IsChecked="True"
+                              Style="{StaticResource DarkCheckBox}"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
         <!-- ═══ 執行按鈕 ═══ -->
-        <Button x:Name="ExecuteBtn" Grid.Row="3" Content="&#x25B6;  開始轉換"
+        <Button x:Name="ExecuteBtn" Grid.Row="4" Content="&#x25B6;  開始轉換"
                 Style="{StaticResource ExecuteButton}" Margin="0,0,0,16"
                 Click="Execute_Click"/>
 
         <!-- ═══ 進度區 ═══ -->
-        <Grid Grid.Row="4" Margin="0,0,0,10">
+        <Grid Grid.Row="5" Margin="0,0,0,10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -132,7 +156,7 @@
         </Grid>
 
         <!-- ═══ 日誌區 ═══ -->
-        <Border Grid.Row="5" CornerRadius="12" Background="#13132A" BorderBrush="{StaticResource BorderBrush}"
+        <Border Grid.Row="6" CornerRadius="12" Background="#13132A" BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1" Margin="0,0,0,10" Padding="2">
             <TextBox x:Name="LogBox" IsReadOnly="True" TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto" AcceptsReturn="True"
@@ -142,7 +166,7 @@
         </Border>
 
         <!-- ═══ 底部狀態 ═══ -->
-        <DockPanel Grid.Row="6">
+        <DockPanel Grid.Row="7">
             <TextBlock x:Name="TimeText" Text="" FontSize="12"
                        Foreground="{StaticResource MutedBrush}" DockPanel.Dock="Left"/>
             <TextBlock x:Name="FileCountText" Text="" FontSize="12"

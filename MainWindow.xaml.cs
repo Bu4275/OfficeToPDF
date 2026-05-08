@@ -193,7 +193,7 @@ public partial class MainWindow : Window
         var files = CollectFiles(inputFolder, outputFolder);
         if (files.Count == 0)
         {
-            MessageBox.Show("輸入資料夾中沒有可轉換的檔案 (doc, docx, xls, xlsx)", "提示",
+            MessageBox.Show("輸入資料夾中沒有可轉換的檔案，或未勾選任何格式", "提示",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -219,11 +219,11 @@ public partial class MainWindow : Window
         var threadCount = (ThreadCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "1";
         var threads = int.Parse(threadCount);
 
-        // 啟動工作執行緒
+        // 啟動工作執行緒 — 每個執行緒會重複使用同一個 Office 實例
         _workerThreads = new List<Thread>();
         for (var i = 0; i < threads; i++)
         {
-            var t = new Thread(ConvertWorker) { IsBackground = true };
+            var t = new Thread(ConvertWorkerPooled) { IsBackground = true };
             t.Start();
             _workerThreads.Add(t);
         }
@@ -239,10 +239,24 @@ public partial class MainWindow : Window
         AppendLog("停止中...等待剩餘任務完成...");
     }
 
+    private HashSet<string> GetEnabledExtensions()
+    {
+        var exts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (ChkDoc.IsChecked == true) exts.Add(".doc");
+        if (ChkDocx.IsChecked == true) exts.Add(".docx");
+        if (ChkXls.IsChecked == true) exts.Add(".xls");
+        if (ChkXlsx.IsChecked == true) exts.Add(".xlsx");
+        if (ChkPptx.IsChecked == true) exts.Add(".pptx");
+        return exts;
+    }
+
     private List<(string Input, string Output)> CollectFiles(string inputFolder, string outputFolder)
     {
         var result = new List<(string, string)>();
-        var extensions = new[] { ".doc", ".docx", ".xls", ".xlsx" };
+        var extensions = GetEnabledExtensions();
+
+        if (extensions.Count == 0)
+            return result;
 
         foreach (var file in Directory.EnumerateFiles(inputFolder, "*.*", SearchOption.AllDirectories))
         {
@@ -268,59 +282,101 @@ public partial class MainWindow : Window
         return result;
     }
 
-    // ═══ COM 轉換 Worker ═══
-    private void ConvertWorker()
+    // ═══ COM 轉換 Worker (pooled) ═══
+    // 每個執行緒保持 Office 實例存活，遇到同類型檔案直接重用，省去重複啟動開銷
+    private void ConvertWorkerPooled()
     {
-        while (!_isCancelled && _fileQueue != null && _fileQueue.TryDequeue(out var item))
+        dynamic? wordApp = null;
+        dynamic? excelApp = null;
+        dynamic? pptApp = null;
+
+        try
         {
-            var parts = item.Split('|', 2);
-            var inputFile = parts[0];
-            var outputFile = parts[1];
-            var ext = Path.GetExtension(inputFile).ToLowerInvariant();
-
-            dynamic? app = null;
-            try
+            while (!_isCancelled && _fileQueue != null && _fileQueue.TryDequeue(out var item))
             {
-                var timestamp = DateTime.Now.ToString("HH:mm:ss");
-                AppendLog($"[{timestamp}] {Path.GetFileName(inputFile)} -> pdf");
+                var parts = item.Split('|', 2);
+                var inputFile = parts[0];
+                var outputFile = parts[1];
+                var ext = Path.GetExtension(inputFile).ToLowerInvariant();
 
-                if (ext is ".xls" or ".xlsx")
+                try
                 {
-                    var excelType = Type.GetTypeFromProgID("Excel.Application");
-                    if (excelType == null) throw new InvalidOperationException("Excel is not installed");
-                    app = Activator.CreateInstance(excelType);
-                    app!.Visible = false;
-                    app.DisplayAlerts = false;
+                    var timestamp = DateTime.Now.ToString("HH:mm:ss");
+                    AppendLog($"[{timestamp}] {Path.GetFileName(inputFile)} -> pdf");
 
-                    var workbook = app.Workbooks.Open(inputFile);
-                    workbook.ExportAsFixedFormat(0, outputFile); // xlTypePDF = 0
-                    workbook.Close(false);
+                    if (ext is ".xls" or ".xlsx")
+                    {
+                        if (excelApp == null)
+                        {
+                            var t = Type.GetTypeFromProgID("Excel.Application")
+                                ?? throw new InvalidOperationException("Excel is not installed");
+                            excelApp = Activator.CreateInstance(t);
+                            excelApp!.Visible = false;
+                            excelApp.DisplayAlerts = false;
+                        }
+                        var workbook = excelApp.Workbooks.Open(inputFile);
+                        workbook.ExportAsFixedFormat(0, outputFile); // xlTypePDF = 0
+                        workbook.Close(false);
+                    }
+                    else if (ext is ".pptx")
+                    {
+                        if (pptApp == null)
+                        {
+                            var t = Type.GetTypeFromProgID("PowerPoint.Application")
+                                ?? throw new InvalidOperationException("PowerPoint is not installed");
+                            pptApp = Activator.CreateInstance(t);
+                            pptApp!.DisplayAlerts = 0; // ppAlertsNone
+                        }
+                        var presentation = pptApp.Presentations.Open(inputFile, ReadOnly: true, Untitled: false, WithWindow: false);
+                        presentation.SaveAs(outputFile, 32); // ppSaveAsPDF = 32
+                        presentation.Close();
+                    }
+                    else // .doc, .docx
+                    {
+                        if (wordApp == null)
+                        {
+                            var t = Type.GetTypeFromProgID("Word.Application")
+                                ?? throw new InvalidOperationException("Word is not installed");
+                            wordApp = Activator.CreateInstance(t);
+                            wordApp!.Visible = false;
+                            wordApp.DisplayAlerts = 0; // wdAlertsNone
+                        }
+                        var doc = wordApp.Documents.Open(inputFile);
+                        doc.SaveAs2(outputFile, 17); // wdFormatPDF = 17
+                        doc.Close(false);
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    var wordType = Type.GetTypeFromProgID("Word.Application");
-                    if (wordType == null) throw new InvalidOperationException("Word is not installed");
-                    app = Activator.CreateInstance(wordType);
-                    app!.Visible = false;
-                    app.DisplayAlerts = 0; // wdAlertsNone
+                    Interlocked.Increment(ref _errorCount);
+                    AppendLog($"[錯誤] {Path.GetFileName(inputFile)}: {ex.Message}");
 
-                    var doc = app.Documents.Open(inputFile);
-                    doc.SaveAs2(outputFile, 17); // wdFormatPDF = 17
-                    doc.Close(false);
+                    // COM 出錯後實例可能已損壞，丟棄讓下次重建
+                    if (ext is ".xls" or ".xlsx") { SafeQuit(ref excelApp); }
+                    else if (ext is ".pptx") { SafeQuit(ref pptApp); }
+                    else { SafeQuit(ref wordApp); }
                 }
-            }
-            catch (Exception ex)
-            {
-                Interlocked.Increment(ref _errorCount);
-                AppendLog($"[錯誤] {Path.GetFileName(inputFile)}: {ex.Message}");
-            }
-            finally
-            {
-                try { app?.Quit(); } catch { }
-                if (app != null) Marshal.ReleaseComObject(app);
-                Interlocked.Increment(ref _finishedTasks);
+                finally
+                {
+                    Interlocked.Increment(ref _finishedTasks);
+                }
             }
         }
+        finally
+        {
+            // 整批完成後才關閉 Office
+            SafeQuit(ref wordApp);
+            SafeQuit(ref excelApp);
+            SafeQuit(ref pptApp);
+        }
+    }
+
+    private static void SafeQuit(ref dynamic? app)
+    {
+        if (app == null) return;
+        try { app.Quit(); } catch { }
+        try { Marshal.ReleaseComObject(app); } catch { }
+        app = null;
     }
 
     // ═══ 進度監控 ═══
